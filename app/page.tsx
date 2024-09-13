@@ -1,101 +1,121 @@
-import Image from "next/image";
+'use client'
+
+import { useState } from 'react';
+import { auth } from './firebase';
+import { createUserWithEmailAndPassword, sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth';
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
+import { toast } from 'react-hot-toast';
+import { FirebaseError } from 'firebase/app';
+import { z } from 'zod';
+
+// Define the schema for form validation
+const formSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters long'),
+});
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    try {
+      // Validate the form data
+      const validatedData = formSchema.parse({ email, password });
+
+      console.log('Attempting to authenticate with:', validatedData.email);
+
+      if (isSignUp) {
+        console.log('Signing up...');
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        console.log('Sign up successful, sending verification email...');
+        await sendEmailVerification(userCredential.user);
+        toast.success("Verification email sent. Please check your inbox.");
+      } else {
+        console.log('Logging in...');
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        console.log('Login successful, checking email verification...');
+        if (!userCredential.user.emailVerified) {
+          setError('Please verify your email before logging in.');
+          return;
+        }
+        toast.success("Successfully logged in");
+        // Redirect to student information page
+        window.location.href = '/student-info';
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        // Handle Zod validation errors
+        setError(error.errors[0].message);
+        toast.error(error.errors[0].message);
+      } else if (error instanceof FirebaseError) {
+        console.log('Firebase Error Code:', error.code);
+        console.log('Firebase Error Message:', error.message);
+      }
+      let errorMessage = 'Authentication failed. ';
+      if (error instanceof FirebaseError) {
+        switch (error.code) {
+          case 'auth/invalid-credential':
+            errorMessage += 'Invalid email or password.';
+            break;
+          case 'auth/user-not-found':
+            errorMessage += 'No user found with this email.';
+            break;
+          case 'auth/wrong-password':
+            errorMessage += 'Incorrect password.';
+            break;
+          case 'auth/email-already-in-use':
+            errorMessage += 'Email already in use. Try logging in instead.';
+            break;
+          default:
+            errorMessage += error.message;
+        }
+      }
+      setError(errorMessage);
+      toast.error(errorMessage);
+    }
+  }
+
+  return (
+    <div className="flex justify-center items-center min-h-screen">
+      <Card className="w-[360px] h-[350px]">
+        <CardHeader>
+          <CardTitle className="text-xl">{isSignUp ? 'Sign Up' : 'Login'}</CardTitle>
+          <CardDescription className='text-sm'>{isSignUp ? 'Create a new account' : 'Enter your email and password'}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {error && <p className="text-red-500 mb-4">{error}</p>}
+          <form onSubmit={handleSubmit}>
+            <Input 
+              type="email" 
+              placeholder="Email" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              className="mb-4"
+              autoComplete="email"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+            <Input 
+              type="password" 
+              placeholder="Password" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              className="mb-4"
+              autoComplete="current-password"
+            />
+            <Button type="submit" className="w-full mb-4">{isSignUp ? 'Sign Up' : 'Login'}</Button>
+          </form>
+          <Button variant="link" onClick={() => setIsSignUp(!isSignUp)} className="w-full">
+            {isSignUp ? 'Already have an account? Login' : 'Need an account? Sign Up'}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
-  );
+  )
 }
